@@ -1,0 +1,3 @@
+First string: {{strings.string1}}
+<br />
+Second string: {{strings.string2}}
