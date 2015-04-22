@@ -1,5 +1,9 @@
-require ["test", "test2", "templates", "i18n!strings/nls/main", "jquery", "underscore", "backbone"], 
-		(test, test2, templates, strings, $, _, Backbone) ->
-    test.exec()
-    test2.exec()
-    $("body").html templates.render "test"
+require ["mandelbrot", "templates", "i18n!strings/nls/main", "jquery", "underscore", "backbone"],
+		(mandelbrot, templates, strings, $, _, Backbone) ->
+			width = window.innerWidth
+			height = window.innerHeight
+			$canvas = $ "<canvas />"
+
+			$(document.body).append($canvas)
+
+			main = new mandelbrot.MandelbrotRender($canvas)
