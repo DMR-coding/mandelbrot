@@ -68,7 +68,6 @@ define ["jquery", "underscore"], ($, _) ->
   class MandelbrotRender
     constructor: (@$canvas) ->
       @$canvas.on("click", @onClick)
-      @$canvas.on("mousemove", @onMouseMove)
 
       @canvas = @$canvas[0]
       @context = @canvas.getContext("2d")
@@ -81,13 +80,9 @@ define ["jquery", "underscore"], ($, _) ->
       @render()
 
     onClick: (e) =>
-      @zoom getMouseCoord e, @canvas
+      e.preventDefault()
+      @zoom getMouseCoord(e, @canvas), e.shiftKey
       @render()
-
-    onMouseMove: (e) =>
-      [x, y] = getMouseCoord e, @canvas
-      debug = x + ", " + y + ": " + scoreDivergence(@pixelToPoint([x, y]))
-      console.log(debug)
 
     render: () ->
       width = PIXEL_RATIO * window.innerWidth
@@ -159,12 +154,16 @@ define ["jquery", "underscore"], ($, _) ->
 
     #Scale the logical viewport by a constant amount and center it on the
     #provided pixel.
-    zoom: (pixel) ->
+    zoom: (pixel, out=false) ->
       [x, y] = @pixelToPoint pixel
       [width, height] = @viewportSize()
 
-      width *= ZOOM_INCREMENT
-      height *= ZOOM_INCREMENT
+      if out
+        width *= 1/ZOOM_INCREMENT
+        height *= 1/ZOOM_INCREMENT
+      else
+        width *= ZOOM_INCREMENT
+        height *= ZOOM_INCREMENT
 
       @min_x = x - width/2
       @max_x = x + width/2
