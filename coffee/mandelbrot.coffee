@@ -1,4 +1,4 @@
-define ["jquery"], ($) ->
+define ["jquery", "underscore"], ($, _) ->
   INIT_MAX_X = 1
   INIT_MIN_X = -2
   INIT_MAX_Y = 1.3
@@ -90,44 +90,53 @@ define ["jquery"], ($) ->
       console.log(debug)
 
     render: () ->
-      @canvas.width = PIXEL_RATIO * window.innerWidth
-      @canvas.height = PIXEL_RATIO * window.innerHeight
-      frame = @context.createImageData(@canvas.width, @canvas.height)
+      width = PIXEL_RATIO * window.innerWidth
+      height = PIXEL_RATIO * window.innerHeight
+      if @canvas.height != height or @canvas.width != width
+        @canvas.width = PIXEL_RATIO * window.innerWidth
+        @canvas.height = PIXEL_RATIO * window.innerHeight
 
-      histogram = new Array(MAX_ITERATIONS)
-      scores = new Array(@canvas.width * @canvas.height - 1)
+      @context.font = "48px 'Helvetica Neue', 'Helvetica', 'Arial', Sans-Serif"
+      @context.fillStyle = "orange"
+      @context.fillText("Working...", 50, 50)
 
-      for x in [0...frame.width]
-        for y in [0...frame.height]
-          point = @pixelToPoint [x,y]
+      _.defer =>
+        frame = @context.createImageData(@canvas.width, @canvas.height)
 
-          score = scoreDivergence point
-          scores[x + y * frame.width] = score
-          score = Math.floor(score)
-          if histogram[score]? then histogram[score] += 1 else histogram[score] = 1
+        histogram = new Array(MAX_ITERATIONS)
+        scores = new Array(@canvas.width * @canvas.height - 1)
 
-      totalScore = 0
-      for i in [0 ... MAX_ITERATIONS]
-        if histogram[i]? then totalScore += histogram[i]
+        for x in [0...frame.width]
+          for y in [0...frame.height]
+            point = @pixelToPoint [x,y]
 
-      for i in [0 ... scores.length]
-        score = scores[i]
-        if score == MAX_ITERATIONS
-          setPixelData(frame, 4 * i, [0, 0, 0, MAX_COLOR_VALUE])
-        else
-          hue1 = 0.0
-          hue2 = 0.0
-          for n in [0 ... score]
-            if histogram[n]?
-              hue1 = hue2
-              hue2 += histogram[n] / totalScore
+            score = scoreDivergence point
+            scores[x + y * frame.width] = score
+            score = Math.floor(score)
+            if histogram[score]? then histogram[score] += 1 else histogram[score] = 1
 
-          color1 = mapColor(hue1)
-          color2 = mapColor(hue2)
+        totalScore = 0
+        for i in [0 ... MAX_ITERATIONS]
+          if histogram[i]? then totalScore += histogram[i]
 
-          setPixelData(frame, 4 * i, interpolate(color1, color2, score % 1) )
+        for i in [0 ... scores.length]
+          score = scores[i]
+          if score == MAX_ITERATIONS
+            setPixelData(frame, 4 * i, [0, 0, 0, MAX_COLOR_VALUE])
+          else
+            hue1 = 0.0
+            hue2 = 0.0
+            for n in [0 ... score]
+              if histogram[n]?
+                hue1 = hue2
+                hue2 += histogram[n] / totalScore
 
-      @context.putImageData(frame, 0, 0)
+            color1 = mapColor(hue1)
+            color2 = mapColor(hue2)
+
+            setPixelData(frame, 4 * i, interpolate(color1, color2, score % 1) )
+
+        @context.putImageData(frame, 0, 0)
 
     #scale+transform each physical pixel to a logical point in the viewport
     pixelToPoint: (pixel) ->
