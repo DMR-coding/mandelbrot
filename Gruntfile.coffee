@@ -2,13 +2,20 @@ module.exports = (grunt)->
     grunt.initConfig
         pkg: grunt.file.readJSON "package.json"
         clean: ["build"]
-        copy: 
+        copy:
             debug:
                 files: [
                     expand: true
                     cwd: "static"
                     src: "**"
                     dest: "build/debug/"
+                ]
+            dist:
+                files: [
+                    expand: true
+                    cwd: "build/debug"
+                    src: ["*", "js/require.js", "!**map"]
+                    dest: "build/dist/"
                 ]
         sass:
             debug:
@@ -22,6 +29,18 @@ module.exports = (grunt)->
                     #top-level sass file, and let it @import the rest so that
                     #their order can be strictly determined.
                     "build/debug/css/page.css":"sass/page.sass"
+            dist:
+                options:
+                    style: "compressed"
+                    debugInfo: false
+                    lineNumbers: false
+                    sourcemap: "none"
+                files:
+                    #Because of how CSS works, the order in which sass files are
+                    #imported is very important. Hence, we only grunt one
+                    #top-level sass file, and let it @import the rest so that
+                    #their order can be strictly determined.
+                    "build/dist/css/page.css":"sass/page.sass"
         coffee:
             debug:
                 options:
@@ -30,19 +49,19 @@ module.exports = (grunt)->
                     expand: true
                     cwd: "coffee"
                     src: "**/*.coffee"
-                    dest: "build/debug/js/" 
+                    dest: "build/debug/js/"
                     ext: ".js"
                 ]
         hogan:
             debug:
                 options:
                     amdWrapper: true
-                    amdRequire: 
+                    amdRequire:
                         "hogan-2.0.0.min.amd": "Hogan"
                     defaultName: (filename) ->
                         #Strip out everything but the bare filename
                         return filename.match(/.*\/(.*)\.hogan/)[1]
-                files: 
+                files:
                     "build/debug/js/templates_base.js":"hogan/**/*.hogan"
         yuidoc:
             debug:
@@ -66,12 +85,19 @@ module.exports = (grunt)->
             hogan:
                 files: ["hogan/**/*"]
                 tasks: ["hogan:debug"]
+        requirejs:
+            dist:
+                options:
+                    baseUrl: "build/debug/js"
+                    name: "main"
+                    out: "build/dist/js/main.js"
 
     #Technologies
     grunt.loadNpmTasks "grunt-contrib-sass"
     grunt.loadNpmTasks "grunt-contrib-coffee"
     grunt.loadNpmTasks "grunt-contrib-hogan"
     grunt.loadNpmTasks "grunt-contrib-yuidoc"
+    grunt.loadNpmTasks "grunt-contrib-requirejs"
 
     #Grunt utilities.
     grunt.loadNpmTasks "grunt-contrib-copy"
@@ -80,4 +106,5 @@ module.exports = (grunt)->
 
     grunt.registerTask "debug", ["clean","copy:debug", "sass:debug",
         "coffee:debug", "hogan:debug", "yuidoc:debug"]
+    grunt.registerTask "dist", ["debug", "requirejs", "copy:dist", "sass:dist"]
     grunt.registerTask "default", "debug"
