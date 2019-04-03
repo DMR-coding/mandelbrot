@@ -1,10 +1,10 @@
 define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, math, graphics) {
-  const INIT_MAX_X = 1;
-  const INIT_MIN_X = -2;
-  const INIT_MAX_Y = 1.3;
-  const INIT_MIN_Y = -1.3;
-
   const ZOOM_INCREMENT = 0.5;
+
+  // This algo is so intensive it freezes the DOM on browser with worse thread isolation (*cough*Fx*cough).
+  // So we give a few millis for the loading throbber to actually get rendered before we start hammering
+  // things
+  const RENDERING_DELAY = 50;
 
   class MandelbrotRender {
     constructor($canvas) {
@@ -15,12 +15,10 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
       this.canvas = this.$canvas[0];
       this.context = this.canvas.getContext("2d");
 
-      this.max_x = INIT_MAX_X;
-      this.max_y = INIT_MAX_Y;
-      this.min_x = INIT_MIN_X;
-      this.min_y = INIT_MIN_Y;
-
-      this.render();
+      this.max_x = 1;
+      this.max_y = 1.3;
+      this.min_x = -2;
+      this.min_y = -1.3;
     }
 
     onClick(e) {
@@ -37,11 +35,9 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         this.canvas.height = graphics.PIXEL_RATIO * window.innerHeight;
       }
 
-      this.context.font = "48px 'Helvetica Neue', 'Helvetica', 'Arial', Sans-Serif";
-      this.context.fillStyle = "orange";
-      this.context.fillText("Working...", 50, 50);
+      $(this).trigger('rendering');
 
-      return _.defer(this.renderFrame.bind(this));
+      setTimeout(this.renderFrame.bind(this), RENDERING_DELAY);
     }
 
     renderFrame() {
@@ -69,7 +65,9 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         }
 
         // And here's where we actually write the scratch to the canvas.
-        return this.context.putImageData(frame, 0, 0);
+        this.context.putImageData(frame, 0, 0);
+
+        $(this).trigger('rendered');
     }
 
     scoreToColor(score, histogram, totalScore) {

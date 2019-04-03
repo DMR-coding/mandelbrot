@@ -8,10 +8,19 @@ requirejs.config({
 
 
 require(['mandelbrot', 'jquery'],
-    function(mandelbrot, jQuery) {
-        const $canvas = jQuery('<canvas />');
+    function(mandelbrot, $) {
+        const $canvas = $('<canvas />').appendTo('body');
+        const $loadingIndicator = $("<div class='loading-indicator'></div>");
 
-        jQuery(document.body).append($canvas);
+        const renderer = new mandelbrot.MandelbrotRender($canvas);
 
-        return new mandelbrot.MandelbrotRender($canvas);
+        $(renderer).on('rendering', function(){
+            $loadingIndicator.appendTo('body');
+        });
+
+        $(renderer).on('rendered', function(){
+            $loadingIndicator.remove();
+        });
+
+        renderer.render();
     });
