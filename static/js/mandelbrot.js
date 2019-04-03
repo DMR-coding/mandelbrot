@@ -155,8 +155,6 @@ define(['jquery', 'underscore'], function($, _) {
     //scale+transform each physical pixel to a logical point in the viewport
     pixelToPoint(pixel) {
       let [width, height] = this.getViewportSize();
-      width = Math.abs(this.max_x - this.min_x);
-      height = Math.abs(this.max_y - this.min_y);
 
       let x = pixel[0];
       x *= width / this.canvas.width;
