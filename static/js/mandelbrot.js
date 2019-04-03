@@ -1,71 +1,13 @@
-define(['jquery', 'underscore'], function($, _) {
+define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, math, graphics) {
   const INIT_MAX_X = 1;
   const INIT_MIN_X = -2;
   const INIT_MAX_Y = 1.3;
   const INIT_MIN_Y = -1.3;
 
   const ZOOM_INCREMENT = 0.5;
-  const PIXEL_RATIO = 2;
-
-  const MAX_ITERATIONS = 1000;
 
   const MAX_COLOR_VALUE = 255;
-
-  function setPixelData(imageData, index, rgba) {
-    for (let i = 0, end = rgba.length, asc = 0 <= end; asc ? i < end : i > end; asc ? i++ : i--) {
-      imageData.data[index + i] = rgba[i];
-    }
-    if (rgba.length < 4) {
-      return imageData.data[index + 3] = MAX_COLOR_VALUE;
-    }
-  }
-
-  function interpolate(rgba1, rgba2, proportion) {
-    const rgba3 = [];
-    for (let i = 0, end = rgba1.length, asc = 0 <= end; asc ? i < end : i > end; asc ? i++ : i--) {
-      rgba3[i] = (rgba1[i] * (1 - proportion)) + (rgba2[i] * proportion);
-    }
-    return rgba3;
-  }
-
-  function scoreDivergence(point) {
-    const [lx, ly] = point;
-    let x = 0.0;
-    let y = 0.0;
-
-    let iteration = 0;
-
-    while ((((x*x) + (y*y)) < 0xF00) && (iteration < MAX_ITERATIONS)) {
-      const tx = ((x*x) - (y*y)) + lx;
-      y = (2*x*y) + ly;
-      x = tx;
-      iteration += 1;
-    }
-
-    if (iteration < MAX_ITERATIONS) {
-      const zn = Math.sqrt((x*x) + (y*y));
-      const nu = Math.log( Math.log(zn) / Math.log(2)) / Math.log(2);
-      iteration = (iteration + 1) - nu;
-    }
-
-    return iteration;
-  }
-
-  function getMouseCoord(e, element) {
-    const rect = element.getBoundingClientRect();
-    return [PIXEL_RATIO * (e.clientX - rect.left), PIXEL_RATIO * (e.clientY - rect.top)];
-  }
-
-  function mapColor(intensity) {
-    const cutoff = .85;
-    if (intensity < cutoff) {
-      return [0, 0, MAX_COLOR_VALUE * intensity];
-    } else {
-      intensity -= cutoff;
-      const weight = 1 / (1 - cutoff);
-      return [MAX_COLOR_VALUE * intensity * weight, 0, 0];
-    }
-  }
+  const OPAQUE = 255; // Really identical to MAX_COLOR_VALUE but more informative at the end of an RGBA quad
 
   class MandelbrotRender {
     constructor($canvas) {
@@ -86,70 +28,100 @@ define(['jquery', 'underscore'], function($, _) {
 
     onClick(e) {
       e.preventDefault();
-      this.zoom(getMouseCoord(e, this.canvas), e.shiftKey);
+      this.zoom(graphics.getMouseCoord(e, this.canvas), e.shiftKey);
       return this.render();
     }
 
     render() {
-      const width = PIXEL_RATIO * window.innerWidth;
-      const height = PIXEL_RATIO * window.innerHeight;
+      const width = graphics.PIXEL_RATIO * window.innerWidth;
+      const height = graphics.PIXEL_RATIO * window.innerHeight;
       if ((this.canvas.height !== height) || (this.canvas.width !== width)) {
-        this.canvas.width = PIXEL_RATIO * window.innerWidth;
-        this.canvas.height = PIXEL_RATIO * window.innerHeight;
+        this.canvas.width = graphics.PIXEL_RATIO * window.innerWidth;
+        this.canvas.height = graphics.PIXEL_RATIO * window.innerHeight;
       }
 
       this.context.font = "48px 'Helvetica Neue', 'Helvetica', 'Arial', Sans-Serif";
       this.context.fillStyle = "orange";
       this.context.fillText("Working...", 50, 50);
 
-      return _.defer(() => {
-        let i, score;
-        let asc2, end2;
-        let asc3, end3;
+      return _.defer(this.renderFrame.bind(this));
+    }
+
+    renderFrame() {
+        // This is a scratch that we can write image data to, such that it won't be rendered until we actually
+        // do `putImageData` below
         const frame = this.context.createImageData(this.canvas.width, this.canvas.height);
 
-        const histogram = new Array(MAX_ITERATIONS);
-        const scores = new Array((this.canvas.width * this.canvas.height) - 1);
+        // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
+        // actually performed. All else is pretty-printing.
+        const [histogram, scores] = this.generateView(frame.width, frame.height);
 
-        for (let x = 0, end = frame.width, asc = 0 <= end; asc ? x < end : x > end; asc ? x++ : x--) {
-          for (let y = 0, end1 = frame.height, asc1 = 0 <= end1; asc1 ? y < end1 : y > end1; asc1 ? y++ : y--) {
-            const point = this.pixelToPoint([x,y]);
-
-            score = scoreDivergence(point);
-            scores[x + (y * frame.width)] = score;
-            score = Math.floor(score);
-            if (histogram[score] != null) { histogram[score] += 1; } else { histogram[score] = 1; }
-          }
-        }
-
+        // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
+        // important here is that we're determining how much of it we have in frame total, so that each
+        // individual pixel can get a color value based on how it scores relative to the whole view. (That
+        // relative score is what makes mandelbrot visualizations pretty!)
         let totalScore = 0;
-        for (i = 0, end2 = MAX_ITERATIONS, asc2 = 0 <= end2; asc2 ? i < end2 : i > end2; asc2 ? i++ : i--) {
-          if (histogram[i] != null) { totalScore += histogram[i]; }
+        for (let i = 0; i < math.MAX_ITERATIONS; i++) {
+          if (histogram[i]) { totalScore += histogram[i]; }
         }
 
-        for (i = 0, end3 = scores.length, asc3 = 0 <= end3; asc3 ? i < end3 : i > end3; asc3 ? i++ : i--) {
-          score = scores[i];
-          if (score === MAX_ITERATIONS) {
-            setPixelData(frame, 4 * i, [0, 0, 0, MAX_COLOR_VALUE]);
+        // Here's where we take each score, translate it into
+        for (let i = 0; i < scores.length; i++) {
+          graphics.setPixelData(frame, i, this.scoreToColor(scores[i], histogram, totalScore))
+        }
+
+        return this.context.putImageData(frame, 0, 0);
+    }
+
+    scoreToColor(score, histogram, totalScore) {
+          if (score === math.MAX_ITERATIONS) {
+            return [0, 0, 0, OPAQUE];
           } else {
             let hue1 = 0.0;
             let hue2 = 0.0;
-            for (let n = 0, end4 = score, asc4 = 0 <= end4; asc4 ? n < end4 : n > end4; asc4 ? n++ : n--) {
+            for (let n = 0; n < score; n++) {
               if (histogram[n] != null) {
                 hue1 = hue2;
                 hue2 += histogram[n] / totalScore;
               }
             }
 
-            const color1 = mapColor(hue1);
-            const color2 = mapColor(hue2);
+            const color1 = this.mapColor(hue1);
+            const color2 = this.mapColor(hue2);
 
-            setPixelData(frame, 4 * i, interpolate(color1, color2, score % 1) );
+            return graphics.interpolateColor(color1, color2, score % 1);
+          }
+    }
+
+    mapColor(intensity) {
+      const cutoff = .85;
+      if (intensity < cutoff) {
+        return [0, 0, MAX_COLOR_VALUE * intensity, OPAQUE];
+      } else {
+        intensity -= cutoff;
+        const weight = 1 / (1 - cutoff);
+        return [MAX_COLOR_VALUE * intensity * weight, 0, 0, OPAQUE];
+      }
+    }
+
+    // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
+    // performed. All else is pretty-printing.
+    generateView(width, height) {
+        const histogram = new Array(math.MAX_ITERATIONS);
+        const scores = new Array(width * height - 1);
+
+        for (let x = 0, end = width, asc = 0 <= end; asc ? x < end : x > end; asc ? x++ : x--) {
+          for (let y = 0, end1 = height, asc1 = 0 <= end1; asc1 ? y < end1 : y > end1; asc1 ? y++ : y--) {
+            const point = this.pixelToPoint([x,y]);
+
+            let score = math.scoreDivergence(point);
+            scores[x + (y * width)] = score;
+            score = Math.floor(score);
+            if (histogram[score] != null) { histogram[score] += 1; } else { histogram[score] = 1; }
           }
         }
 
-        return this.context.putImageData(frame, 0, 0);
-      });
+        return [histogram, scores];
     }
 
     //scale+transform each physical pixel to a logical point in the viewport
