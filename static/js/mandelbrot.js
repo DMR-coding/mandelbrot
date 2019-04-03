@@ -11,27 +11,25 @@ define(['jquery', 'underscore'], function($, _) {
 
   const MAX_COLOR_VALUE = 255;
 
-  const getDataIndex = (imageData, x, y) => 4 * (x + (y * imageData.width));
-
-  var setPixelData = function(imageData, index, rgba) {
+  function setPixelData(imageData, index, rgba) {
     for (let i = 0, end = rgba.length, asc = 0 <= end; asc ? i < end : i > end; asc ? i++ : i--) {
       imageData.data[index + i] = rgba[i];
     }
     if (rgba.length < 4) {
       return imageData.data[index + 3] = MAX_COLOR_VALUE;
     }
-  };
+  }
 
-  const interpolate = function(rgba1, rgba2, proportion) {
+  function interpolate(rgba1, rgba2, proportion) {
     const rgba3 = [];
     for (let i = 0, end = rgba1.length, asc = 0 <= end; asc ? i < end : i > end; asc ? i++ : i--) {
       rgba3[i] = (rgba1[i] * (1 - proportion)) + (rgba2[i] * proportion);
     }
     return rgba3;
-  };
+  }
 
-  const scoreDivergence = function(point) {
-    const [lx, ly] = Array.from(point);
+  function scoreDivergence(point) {
+    const [lx, ly] = point;
     let x = 0.0;
     let y = 0.0;
 
@@ -51,14 +49,14 @@ define(['jquery', 'underscore'], function($, _) {
     }
 
     return iteration;
-  };
+  }
 
-  const getMouseCoord = function(e, element) {
+  function getMouseCoord(e, element) {
     const rect = element.getBoundingClientRect();
     return [PIXEL_RATIO * (e.clientX - rect.left), PIXEL_RATIO * (e.clientY - rect.top)];
-  };
+  }
 
-  const mapColor = function(intensity) {
+  function mapColor(intensity) {
     const cutoff = .85;
     if (intensity < cutoff) {
       return [0, 0, MAX_COLOR_VALUE * intensity];
@@ -67,7 +65,7 @@ define(['jquery', 'underscore'], function($, _) {
       const weight = 1 / (1 - cutoff);
       return [MAX_COLOR_VALUE * intensity * weight, 0, 0];
     }
-  };
+  }
 
   class MandelbrotRender {
     constructor($canvas) {
@@ -156,7 +154,7 @@ define(['jquery', 'underscore'], function($, _) {
 
     //scale+transform each physical pixel to a logical point in the viewport
     pixelToPoint(pixel) {
-      let [width, height] = Array.from(this.viewportSize());
+      let [width, height] = this.getViewportSize();
       width = Math.abs(this.max_x - this.min_x);
       height = Math.abs(this.max_y - this.min_y);
 
@@ -171,16 +169,15 @@ define(['jquery', 'underscore'], function($, _) {
       return [x, y];
     }
 
-    viewportSize() {
+    getViewportSize() {
       return [Math.abs(this.max_x - this.min_x), Math.abs(this.max_y - this.min_y)];
     }
 
     //Scale the logical viewport by a constant amount and center it on the
     //provided pixel.
     zoom(pixel, out) {
-      if (out == null) { out = false; }
-      const [x, y] = Array.from(this.pixelToPoint(pixel));
-      let [width, height] = Array.from(this.viewportSize());
+      const [x, y] = this.pixelToPoint(pixel);
+      let [width, height] = this.getViewportSize();
 
       if (out) {
         width *= 1/ZOOM_INCREMENT;
