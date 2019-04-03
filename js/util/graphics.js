@@ -1,4 +1,5 @@
-define(['underscore'], function(_) {
+define(['underscore', 'util/math'], function(_, math) {
+    'use strict';
     const RGBA_LENGTH = 4;
     const PIXEL_RATIO = 2;
 
@@ -32,19 +33,37 @@ define(['underscore'], function(_) {
         if (intensity < cutoff) {
             return [0, 0, MAX_COLOR_VALUE * intensity, OPAQUE];
         } else {
-            intensity -= cutoff;
-            const weight = 1 / (1 - cutoff);
-            return [MAX_COLOR_VALUE * intensity * weight, 0, 0, OPAQUE];
+            return [MAX_COLOR_VALUE * (intensity - cutoff) * (1 / (1 - cutoff)), 0, 0, OPAQUE];
         }
     }
 
+    function scoreToColor(score, histogram, totalScore)
+    {
+        if (score === math.MAX_ITERATIONS) {
+            return BLACK;
+        } else {
+            let hue1 = 0.0;
+            let hue2 = 0.0;
+            for (let n = 0; n < score; n++) {
+                if (histogram[n] != null) {
+                    hue1 = hue2;
+                    hue2 += histogram[n] / totalScore;
+                }
+            }
+
+            const color1 = mapColor(hue1);
+            const color2 = mapColor(hue2);
+
+            return interpolateColor(color1, color2, score % 1);
+        }
+    }
+
+
     return {
-        'BLACK': BLACK,
         'PIXEL_RATIO': PIXEL_RATIO,
         'setPixelData': setPixelData,
-        'interpolateColor': interpolateColor,
         'getMouseCoord': getMouseCoord,
-        'mapColor': mapColor
+        'scoreToColor': scoreToColor
     };
 
 });
