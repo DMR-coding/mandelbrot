@@ -18,5 +18,5 @@ Libraries
 Getting Started
 ---------------
 
-1. Open static/index.html to run the application
+1. Open static/index.html to run the application -- [try it now](https://nentuaby.github.io/mandelbrot/index.html) on Github Pages!
 2. All code is in static/js
