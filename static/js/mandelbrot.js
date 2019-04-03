@@ -6,9 +6,6 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
   const ZOOM_INCREMENT = 0.5;
 
-  const MAX_COLOR_VALUE = 255;
-  const OPAQUE = 255; // Really identical to MAX_COLOR_VALUE but more informative at the end of an RGBA quad
-
   class MandelbrotRender {
     constructor($canvas) {
       this.onClick = this.onClick.bind(this);
@@ -48,12 +45,12 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
     }
 
     renderFrame() {
-        // This is a scratch that we can write image data to, such that it won't be rendered until we actually
-        // do `putImageData` below
+        // This is a scratch that we can write image data to. It won't be rendered until we actually
+        // do `putImageData` below.
         const frame = this.context.createImageData(this.canvas.width, this.canvas.height);
 
         // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
-        // actually performed. All else is pretty-printing.
+        // performed. All else is pretty-printing.
         const [histogram, scores] = this.generateView(frame.width, frame.height);
 
         // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
@@ -65,17 +62,19 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
           if (histogram[i]) { totalScore += histogram[i]; }
         }
 
-        // Here's where we take each score, translate it into
+        // Here's where we take each score, translate it into a color value, and actually write it onto the
+        // scratch.
         for (let i = 0; i < scores.length; i++) {
           graphics.setPixelData(frame, i, this.scoreToColor(scores[i], histogram, totalScore))
         }
 
+        // And here's where we actually write the scratch to the canvas.
         return this.context.putImageData(frame, 0, 0);
     }
 
     scoreToColor(score, histogram, totalScore) {
           if (score === math.MAX_ITERATIONS) {
-            return [0, 0, 0, OPAQUE];
+            return graphics.BLACK;
           } else {
             let hue1 = 0.0;
             let hue2 = 0.0;
@@ -86,22 +85,11 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
               }
             }
 
-            const color1 = this.mapColor(hue1);
-            const color2 = this.mapColor(hue2);
+            const color1 = graphics.mapColor(hue1);
+            const color2 = graphics.mapColor(hue2);
 
             return graphics.interpolateColor(color1, color2, score % 1);
           }
-    }
-
-    mapColor(intensity) {
-      const cutoff = .85;
-      if (intensity < cutoff) {
-        return [0, 0, MAX_COLOR_VALUE * intensity, OPAQUE];
-      } else {
-        intensity -= cutoff;
-        const weight = 1 / (1 - cutoff);
-        return [MAX_COLOR_VALUE * intensity * weight, 0, 0, OPAQUE];
-      }
     }
 
     // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
