@@ -190,8 +190,8 @@ define(['jquery', 'underscore'], function($, _) {
       this.min_x = x - (width/2);
       this.max_x = x + (width/2);
 
-      this.min_y = y - (width/2);
-      return this.max_y = y + (width/2);
+      this.min_y = y - (height/2);
+      return this.max_y = y + (height/2);
     }
   }
 
