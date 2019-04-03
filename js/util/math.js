@@ -1,5 +1,4 @@
 define(['underscore'], function(_){
-  'use strict';
   const MAX_ITERATIONS = 1000;
 
   function scoreDivergence(point) {
