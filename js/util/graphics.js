@@ -1,5 +1,8 @@
 define(['underscore'], function(_) {
     const RGBA_LENGTH = 4;
+
+    // The mandelbrot set has extremely (infinitely...) fine detail and aliasing sticks out like a sore thumb,
+    // so even though it's slow, we render multiple points per pixel.
     const PIXEL_RATIO = 2;
 
     const MAX_COLOR_VALUE = 255;
