@@ -81,7 +81,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         // Here's where we take each score, translate it into a color value, and actually write it onto the
         // scratch.
         for (let i = 0; i < scores.length; i++) {
-          graphics.setPixelData(frame, i, this.scoreToColor(scores[i], histogram, totalScore))
+          graphics.setPixelData(frame, i, graphics.scoreToColor(scores[i], histogram, totalScore))
         }
         trace('begin_blitting', 'plot', 'begin_plotting');
 
@@ -95,26 +95,6 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
           performance.clearMarks();
           performance.clearMeasures();
         }
-    }
-
-    scoreToColor(score, histogram, totalScore) {
-          if (score === math.MAX_ITERATIONS) {
-            return graphics.BLACK;
-          } else {
-            let hue1 = 0.0;
-            let hue2 = 0.0;
-            for (let n = 0; n < score; n++) {
-              if (histogram[n] != null) {
-                hue1 = hue2;
-                hue2 += histogram[n] / totalScore;
-              }
-            }
-
-            const color1 = graphics.mapColor(hue1);
-            const color2 = graphics.mapColor(hue2);
-
-            return graphics.interpolateColor(color1, color2, score % 1);
-          }
     }
 
     // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
