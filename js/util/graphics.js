@@ -8,14 +8,15 @@ define(['underscore'], function(_) {
 
     // imageData is a linear byte array of RGBA values
     function setPixelData(imageData, index, rgba) {
-        index *= RGBA_LENGTH; // Convert from logical index (n RGBA quads into the array) to physical (n bytes in)
+        index *= RGBA_LENGTH;
         for (let i = 0; i < rgba.length; i++) {
+            // Multiply to convert from logical index (n RGBA quads into the array) to physical (n bytes in)
             imageData.data[index + i] = rgba[i];
         }
     }
 
     function interpolateColor(rgba1, rgba2, proportion) {
-        const rgba3 = [];
+        const rgba3 = Array(RGBA_LENGTH);
         for (let i = 0; i < RGBA_LENGTH; i++) {
             rgba3[i] = (rgba1[i] * (1 - proportion)) + (rgba2[i] * proportion);
         }

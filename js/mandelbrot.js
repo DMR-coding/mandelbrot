@@ -6,6 +6,20 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
   // things
   const RENDERING_DELAY = 50;
 
+  // Utility function that sets a new performance mark and measures from a previous one in the same call,
+  // with guarding against performance API not available.
+  function trace(mark_to_set, measure_name, mark_to_measure_from) {
+    if(window.performance){
+      if(mark_to_set) {
+        performance.mark(mark_to_set)
+      }
+
+      if(measure_name && mark_to_measure_from) {
+        performance.measure(measure_name, mark_to_measure_from)
+      }
+    }
+  }
+
   class MandelbrotRender {
     constructor($canvas) {
       this.onClick = this.onClick.bind(this);
@@ -41,13 +55,18 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
     }
 
     renderFrame() {
+        trace('begin_render');
         // This is a scratch that we can write image data to. It won't be rendered until we actually
         // do `putImageData` below.
         const frame = this.context.createImageData(this.canvas.width, this.canvas.height);
 
+        trace('begin_generate_view', 'create_image_data', 'begin_render');
+
         // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
         // performed. All else is pretty-printing.
         const [histogram, scores] = this.generateView(frame.width, frame.height);
+
+        trace('begin_totalling_score', 'generate_view', 'begin_generate_view');
 
         // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
         // important here is that we're determining how much of it we have in frame total, so that each
@@ -57,17 +76,25 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         for (let i = 0; i < math.MAX_ITERATIONS; i++) {
           if (histogram[i]) { totalScore += histogram[i]; }
         }
+        trace('begin_plotting', 'total_score', 'begin_totalling_score');
 
         // Here's where we take each score, translate it into a color value, and actually write it onto the
         // scratch.
         for (let i = 0; i < scores.length; i++) {
           graphics.setPixelData(frame, i, this.scoreToColor(scores[i], histogram, totalScore))
         }
+        trace('begin_blitting', 'plot', 'begin_plotting');
 
         // And here's where we actually write the scratch to the canvas.
         this.context.putImageData(frame, 0, 0);
+        trace(null, 'blit', 'begin_blitting');
 
         $(this).trigger('rendered');
+        if (window.performance && window.console) {
+          console.log(performance.getEntriesByType('measure'));
+          performance.clearMarks();
+          performance.clearMeasures();
+        }
     }
 
     scoreToColor(score, histogram, totalScore) {
@@ -96,11 +123,19 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         const histogram = new Array(math.MAX_ITERATIONS);
         const scores = new Array(width * height - 1);
 
-        for (let x = 0, end = width, asc = 0 <= end; asc ? x < end : x > end; asc ? x++ : x--) {
-          for (let y = 0, end1 = height, asc1 = 0 <= end1; asc1 ? y < end1 : y > end1; asc1 ? y++ : y--) {
-            const point = this.pixelToPoint([x,y]);
+        // This is basically what pixelToPoint does. We duplicate the logic here because this
+        // is a tight inner loop, and the overhead turns out to be pretty significant if
+        // we actually call that method and its chained dependencies.
+        const horizontal_factor = Math.abs(this.max_x - this.min_x) / this.canvas.width;
+        const vertical_factor = Math.abs(this.max_y - this.min_y) / this.canvas.height;
 
-            let score = math.scoreDivergence(point);
+        for (let x = 0; x < width; x++) {
+          for (let y = 0; y < height; y++) {
+
+            let score = math.scoreDivergence(
+             x * horizontal_factor +  this.min_x,
+             y * vertical_factor + this.min_y
+            );
             scores[x + (y * width)] = score;
             score = Math.floor(score);
             if (histogram[score] != null) { histogram[score] += 1; } else { histogram[score] = 1; }
@@ -112,17 +147,11 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
     //scale+transform each physical pixel to a logical point in the viewport
     pixelToPoint(pixel) {
-      let [width, height] = this.getViewportSize();
-
-      let x = pixel[0];
-      x *= width / this.canvas.width;
-      x += this.min_x;
-
-      let y = pixel[1];
-      y *= height / this.canvas.height;
-      y += this.min_y;
-
-      return [x, y];
+      const [width, height] = this.getViewportSize();
+      return [
+          pixel[0] * (width / this.canvas.width) +  this.min_x,
+          pixel[1] * (height / this.canvas.height) + this.min_y
+      ];
     }
 
     getViewportSize() {

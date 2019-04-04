@@ -1,8 +1,7 @@
 define(['underscore'], function(_){
   const MAX_ITERATIONS = 1000;
 
-  function scoreDivergence(point) {
-    const [lx, ly] = point;
+  function scoreDivergence(lx, ly) {
     let x = 0.0;
     let y = 0.0;
 
