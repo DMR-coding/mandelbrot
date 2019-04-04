@@ -8,9 +8,9 @@ define(['underscore'], function(_) {
 
     // imageData is a linear byte array of RGBA values
     function setPixelData(imageData, index, rgba) {
+        // Multiply to convert from logical index (n RGBA quads into the array) to physical (n bytes in)
         index *= RGBA_LENGTH;
         for (let i = 0; i < rgba.length; i++) {
-            // Multiply to convert from logical index (n RGBA quads into the array) to physical (n bytes in)
             imageData.data[index + i] = rgba[i];
         }
     }
@@ -33,9 +33,8 @@ define(['underscore'], function(_) {
         if (intensity < cutoff) {
             return [0, 0, MAX_COLOR_VALUE * intensity, OPAQUE];
         } else {
-            intensity -= cutoff;
             const weight = 1 / (1 - cutoff);
-            return [MAX_COLOR_VALUE * intensity * weight, 0, 0, OPAQUE];
+            return [MAX_COLOR_VALUE * (intensity - cutoff) * weight, 0, 0, OPAQUE];
         }
     }
 
