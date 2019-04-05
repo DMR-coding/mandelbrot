@@ -3,11 +3,11 @@ define(['underscore'], function(_) {
 
     const MAX_ITERATIONS = 1000;
 
-    function scoreRangeDivergence(start, end, x_scale, y_scale, min_x, min_y, width, height) {
-        const scores = new Array(end - 1);// - start);
+    function scoreRangeDivergence(x_scale, y_scale, min_x, min_y, width, height) {
+        const scores = new Array(width * height);// - start);
 
-        for (let y = Math.floor(start / width); y < height; y++) {
-            for (let x = start % width; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
                 scores[x + y * width] = scoreDivergence(x * x_scale + min_x, y * y_scale + min_y);
             }
         }

@@ -102,7 +102,6 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             // figure out how to do that so that I don't create so much overhead that it more than cancels
             // the benefit of parallelizing!
             let scores = await math.scoreRangeDivergence(
-                0, width * height,
                 x_scale, y_scale,
                 this.min_x, this.min_y,
                 width, height
