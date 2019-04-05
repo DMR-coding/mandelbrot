@@ -3,16 +3,33 @@ define(['underscore'], function(_) {
 
     const MAX_ITERATIONS = 1000;
 
+    // FIXME: There's an off-by-one error somewhere that's causing empty pixels between the work units and
+    // skewing the resulting image
     function scoreRangeDivergence(start, end, x_scale, y_scale, min_x, min_y, width, height) {
-        const scores = new Array(end - 1);// - start);
+        const scores = new Array(end - start - 1);
 
-        for (let y = Math.floor(start / width); y < height; y++) {
-            for (let x = start % width; x < width; x++) {
-                scores[x + y * width] = scoreDivergence(x * x_scale + min_x, y * y_scale + min_y);
+        let flat_index = 0;
+        let first_inner_loop = true;
+        let initial_y = Math.floor(start / width);
+
+          for (let y = initial_y; y < height; y++) {
+              let x = 0;
+              if (y === initial_y) {
+                  console.log(x, y);
+                  x = start % width;
+              }
+              for (/*pass*/; x < width; x++) {
+                scores[flat_index] = scoreDivergence(x * x_scale + min_x, y * y_scale + min_y);
+                //scores[flat_index] = ; //scoreDivergence(x * x_scale + min_x, y * y_scale + min_y);
+
+                flat_index++;
+                if((flat_index + start) >= (end - 1)){
+                    console.log(x, y);
+                    return scores;
+                }
             }
+            first_inner_loop = false;
         }
-
-        return scores;
 
         // The mandelbrot set consists of points in complex space where iteratively applying a certain function to
         // the point's coordinate does not cause the value to approach infinity. However, in an explorer, the
@@ -53,6 +70,6 @@ define(['underscore'], function(_) {
     return {
         'MAX_ITERATIONS': MAX_ITERATIONS,
         // 'scoreDivergence': scoreDivergence,
-        'scoreRangeDivergence': parallel.scoreRangeDivergence
+        'scoreRangeDivergence': scoreRangeDivergence
     };
 });

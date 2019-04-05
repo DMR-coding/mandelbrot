@@ -89,6 +89,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
         // performed. All else is pretty-printing.
         async generateView(width, height) {
+            let scores = new Array(width * height);
             const histogram = new Array(math.MAX_ITERATIONS);
 
             // This is basically what pixelToPoint does. We duplicate the logic here because this
@@ -101,12 +102,38 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             // go; but the MAIN point of it was so that we could divvy up the work. However I still need to
             // figure out how to do that so that I don't create so much overhead that it more than cancels
             // the benefit of parallelizing!
-            let scores = await math.scoreRangeDivergence(
-                0, width * height,
-                x_scale, y_scale,
-                this.min_x, this.min_y,
-                width, height
-            );
+            let WORKER_COUNT = 16;
+
+            let ranges = [];
+            const range_size = Math.ceil(scores.length / WORKER_COUNT);
+            for (let i = 0; i < WORKER_COUNT; i++) {
+                let start = i * range_size;
+                let end =  Math.min((i + 1) * range_size, width * height);
+                ranges.push(
+                    math.scoreRangeDivergence(
+                        start, end,
+                        x_scale, y_scale,
+                        this.min_x, this.min_y,
+                        width, height
+                    )
+                );
+            }
+
+            ranges = await Promise.all(ranges);
+
+            console.log(scores);
+            console.log(ranges);
+
+            // A functional style reduce-by-concat is waaaaaaay inefficient here, at least in Firefox,
+            // so let's do this the old fashioned way
+            let flattened_index = 0;
+            for(let i = 0; i < ranges.length; i++){ // The for-of loop also starts to die at this size
+                console.log(ranges[i].length);
+                for(let n = 0; n < ranges[i].length; n++){
+                    scores[flattened_index] = ranges[i][n];
+                    flattened_index++;
+                }
+            }
 
             for (let score of scores) {
                 score = Math.floor(score);
@@ -115,7 +142,6 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
                 } else {
                     histogram[score] = 1;
                 }
-
             }
 
             return [histogram, scores];
