@@ -1,58 +1,89 @@
-define(['underscore'], function(_) {
-    const operative = window.operative; // This lib needs to be imported as a script tag for odd scope reasons
-
+//the GPU lib is supposed to be AMD compatible, but its AMD support is kinda broken.
+// Requiring it actually does cause it to be loaded, so don't remove it as a dependency, but it just winds up
+// registered as window.GPU
+define(['underscore', 'GPU'], function(_, _GPU) {
     const MAX_ITERATIONS = 1000;
+    const DEBUG = false;
 
-    function scoreRangeDivergence(x_scale, y_scale, min_x, min_y, width, height) {
-        const scores = new Array(width * height);// - start);
+    let gpuWorker = new window.GPU();
 
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                scores[x + y * width] = scoreDivergence(x * x_scale + min_x, y * y_scale + min_y);
-            }
+    // The mandelbrot set consists of points in complex space where iteratively applying a certain function to
+    // the point's coordinate does not cause the value to approach infinity. However, in an explorer, the
+    // *actual* mandelbrot set is the dull region in the middle of all the fun colors-- those are actually
+    // points _near_ the set. They are given a score based on how many iterations it takes for them to diverge
+    // (approach infinity) which makes for the most interesting visuals.
+    function scoreDivergence(x_scale, y_scale, left_x, bottom_y) {
+        // Screen x runs in the same direction as cartesian x; screen y is opposite
+        // cartesian y
+        const lx = this.thread.x * x_scale + left_x;
+        const ly = this.thread.y * y_scale + bottom_y;
+
+        let x = 0.0;
+        let y = 0.0;
+
+        let iteration = 0;
+
+        while ((((x * x) + (y * y)) < 0xF00) && (iteration < this.constants.MAX_ITERATIONS)) {
+            const tx = ((x * x) - (y * y)) + lx;
+            y = (2 * x * y) + ly;
+            x = tx;
+            iteration += 1;
         }
 
-        return scores;
+        if (iteration < this.constants.MAX_ITERATIONS) {
+            const zn = Math.sqrt((x * x) + (y * y));
+            const nu = Math.log(Math.log(zn) / Math.log(2)) / Math.log(2);
+            iteration = (iteration + 1) - nu;
+        }
 
-        // The mandelbrot set consists of points in complex space where iteratively applying a certain function to
-        // the point's coordinate does not cause the value to approach infinity. However, in an explorer, the
-        // *actual* mandelbrot set is the dull region in the middle of all the fun colors-- those are actually
-        // points _near_ the set. They are given a score based on how many iterations it takes for them to diverge
-        // (approach infinity) which makes for the most interesting visuals.
-        function scoreDivergence(lx, ly) {
-            const MAX_ITERATIONS = 1000; // Gotta repeat this so this function body doesnt' have any external reference, for workerization purposes
-
-            let x = 0.0;
-            let y = 0.0;
-
-            let iteration = 0;
-
-            while ((((x * x) + (y * y)) < 0xF00) && (iteration < MAX_ITERATIONS)) {
-                const tx = ((x * x) - (y * y)) + lx;
-                y = (2 * x * y) + ly;
-                x = tx;
-                iteration += 1;
+        if(this.constants.DEBUG === 0){
+           return iteration;
+        }
+        else {
+            // Do direct graphical output
+            if(iteration === this.constants.MAX_ITERATIONS) {
+                this.color(0, 0, 0);
+            } else {
+                if(ly < 0 && lx < 0) {
+                    this.color(0, 1, 1);
+                }
+                if(ly < 0 && lx > 0) {
+                    this.color(0, .75, .75);
+                }
+                if(ly > 0 && lx < 0) {
+                    this.color(1, 1, 0);
+                }
+                if(ly > 0 && lx > 0) {
+                    this.color(.75, .75, 0);
+                }
             }
 
-            if (iteration < MAX_ITERATIONS) {
-                const zn = Math.sqrt((x * x) + (y * y));
-                const nu = Math.log(Math.log(zn) / Math.log(2)) / Math.log(2);
-                iteration = (iteration + 1) - nu;
+            const delta = 0.0004;
+            if(Math.abs(lx) < delta ) {
+                this.color(0,1,0);
             }
-
-            return iteration;
+            if(Math.abs(ly) < delta) {
+                this.color(1,0,0)
+            }
         }
     }
 
-    // Operative is an implicitly-imported library. It does some kind of scoping magic w/ the browser
-    // that doesn't work if it's not used as a script tag.
-    const parallel = operative({
-        scoreRangeDivergence: scoreRangeDivergence
-    });
+    function scoreDivergenceKernelFactory(canvas) {
+        gpuWorker = new GPU({'canvas': canvas});
+        return gpuWorker.createKernel(scoreDivergence,
+            {
+                'constants': {
+                    'MAX_ITERATIONS': MAX_ITERATIONS,
+                    'DEBUG': DEBUG ? 1 : 0
+                }
+            }
+        ).setGraphical(DEBUG);
+    }
+
 
     return {
         'MAX_ITERATIONS': MAX_ITERATIONS,
         // 'scoreDivergence': scoreDivergence,
-        'scoreRangeDivergence': parallel.scoreRangeDivergence
+        'scoreDivergenceKernelFactory': scoreDivergenceKernelFactory
     };
 });

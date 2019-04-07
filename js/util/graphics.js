@@ -1,7 +1,11 @@
-define(['underscore', 'util/math'], function(_, math) {
-    const operative = window.operative; // This lib needs to be imported as a script tag for odd scope reasons
+//the GPU lib is supposed to be AMD compatible, but its AMD support is kinda broken.
+// Requiring it actually does cause it to be loaded, so don't remove it as a dependency, but it just winds up
+// registered as window.GPU
+define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
+    const MAX_COLOR_VALUE = 1.0;
 
-    const RGBA_LENGTH = 4;
+    const INTENSITY_CUTOFF = 0.85;
+    const HIGH_INTENSITY_WEIGHT = 1 / (1- INTENSITY_CUTOFF);
 
     // The mandelbrot set has extremely (infinitely...) fine detail and aliasing sticks out like a sore thumb,
     // so even though it's slow, we render multiple points per pixel.
@@ -21,92 +25,85 @@ define(['underscore', 'util/math'], function(_, math) {
         return [PIXEL_RATIO * (e.clientX - rect.left), PIXEL_RATIO * (e.clientY - rect.top)];
     }
 
-    // TODO: the point of asynchronizing this method was to parallelize it with operative, but operative is
-    // giving an error when used here that I still need to hunt down.
-    async function colorize(scores, histogram) {
-        // Constants need to be inside this function, even if that duplicate a global constant,
-        // so that this function can be self-contained enough for Operative to tear it away
-        const RGBA_LENGTH = 4;
+    function scoreToColor(scores, totalScore, histogram) {
+        const score = scores[this.thread.y][this.thread.x];
 
-        const MAX_COLOR_VALUE = 255;
-        const OPAQUE = 255; // Really identical to MAX_COLOR_VALUE but more informative at the end of an RGBA quad
-        const BLACK = [0, 0, 0, OPAQUE];
+        if (score === this.constants.MAX_ITERATIONS) {
+            // These are the points that are actually approximated to be in the mandelbrot set.
+            this.color(0, 0, 0);
+        } else {
+            // The coloring algorithm is the heart of why fractal explorers are pretty. This one is taken
+            // from literature I read back in 2015; I don't entirely understand how it was derived, but it's
+            // basically more of an artistic statement than a mathematical utility. It makes
+            // sure complex mathematical structure maps to nice gradients of color without worrying too much
+            // about what the mathematical structure means.
 
-        const INTENSITY_CUTOFF = 0.85;
-
-        const colors = new Array(scores.length);
-
-        // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
-        // important here is that we're determining how much of it we have in frame total, so that each
-        // individual pixel can get a color value based on how it scores relative to the whole view. (That
-        // relative score is what makes mandelbrot visualizations pretty!)
-        let totalScore = 0;
-        for (let i = 0; i < math.MAX_ITERATIONS; i++) {
-            if (histogram[i]) {
-                totalScore += histogram[i];
-            }
-        }
-
-        for(let i = 0; i < scores.length; i++){
-            colors[i] = scoreToColor(scores[i])
-        }
-
-        return colors;
-
-        function scoreToColor(score) {
-            if (score === math.MAX_ITERATIONS) {
-                // These are the points that are actually approximated to be in the mandelbrot set.
-                return BLACK;
-            } else {
-                // The coloring algorithm is the heart of why fractal explorers are pretty. This one is taken
-                // from literature I read back in 2015; I don't entirely understand how it was derived, but it's
-                // basically more of an artistic statement than a mathematical utility. It makes
-                // sure complex mathematical structure maps to nice gradients of color without worrying too much
-                // about what the mathematical structure means.
-
-                let hue1 = 0.0;
-                let hue2 = 0.0;
-                for (let n = 0; n < score; n++) {
-                    if (histogram[n] != null) {
-                        hue1 = hue2;
-                        hue2 += histogram[n] / totalScore;
-                    }
+            let hue1 = 0.0;
+            let hue2 = 0.0;
+            for (let n = 0; n < score; n++) {
+                if (histogram[n] > 0) {
+                    hue1 = hue2;
+                    hue2 += histogram[n] / totalScore;
                 }
-
-                const color1 = mapColor(hue1);
-                const color2 = mapColor(hue2);
-
-                return interpolateColor(color1, color2, score % 1);
             }
-        }
 
-        // Map the first x% of the intensity spectrum to blue of equal intensity;
-        // map the remaining percent to red with roughly the same gamut (so, amplifying the structure of
-        // high-scoring regions.)
-        function mapColor(intensity) {
-            if (intensity < INTENSITY_CUTOFF) {
-                return [0, 0, MAX_COLOR_VALUE * intensity, OPAQUE];
+            // This mapping and then interpolation step would both be factored out, with RGBA quads as arrays,
+            // in normal JS; but it has to be factored in to stop gpu.js from choking on the array data types
+            // getting passed around.
+            let R1 = 0;
+            let G1 = 0;
+            let B1 = 0;
+            if (hue1 < this.constants.INTENSITY_CUTOFF) {
+                B1 = this.constants.MAX_COLOR_VALUE * hue1;
             } else {
-                const weight = 1 / (1 - INTENSITY_CUTOFF);
-                return [MAX_COLOR_VALUE * (intensity - INTENSITY_CUTOFF) * weight, 0, 0, OPAQUE];
+                R1 = this.constants.MAX_COLOR_VALUE
+                    * (hue1 - this.constants.INTENSITY_CUTOFF)
+                    * this.constants.HIGH_INTENSITY_WEIGHT;
             }
-        }
 
-        function interpolateColor(rgba1, rgba2, proportion) {
-            const rgba3 = Array(RGBA_LENGTH);
-            for (let i = 0; i < RGBA_LENGTH; i++) {
-                rgba3[i] = (rgba1[i] * (1 - proportion)) + (rgba2[i] * proportion);
+            let R2 = 0;
+            let G2 = 0;
+            let B2 = 0;
+            if (hue2 < this.constants.INTENSITY_CUTOFF) {
+                B2 = this.constants.MAX_COLOR_VALUE * hue2;
+            } else {
+                R2 = this.constants.MAX_COLOR_VALUE
+                    * (hue2 - this.constants.INTENSITY_CUTOFF)
+                    * this.constants.HIGH_INTENSITY_WEIGHT;
             }
-            return rgba3;
+
+            const proportion = score % 1;
+
+            // gpu.js builtin for outputting
+            this.color(
+                R1 * (1-proportion) + R2 * proportion,
+                G1 * (1-proportion) + G2 * proportion,
+                B1 * (1-proportion) + B2 * proportion
+            );
         }
     }
 
+    function outputKernelFactory(canvas) {
+        const gpuWorker = new GPU({'canvas': canvas});
+
+        return gpuWorker.createKernel(scoreToColor,
+            {
+                'loopMaxIterations': math.MAX_ITERATIONS,
+                'constants': {
+                    'MAX_ITERATIONS': math.MAX_ITERATIONS,
+                    'MAX_COLOR_VALUE': MAX_COLOR_VALUE,
+                    'INTENSITY_CUTOFF': INTENSITY_CUTOFF,
+                    'HIGH_INTENSITY_WEIGHT': HIGH_INTENSITY_WEIGHT
+                }
+            })
+            .setGraphical(true);
+    }
 
     return {
         'PIXEL_RATIO': PIXEL_RATIO,
         'getMouseCoord': getMouseCoord,
-        'colorize': colorize,
-        'setPixelData': setPixelData
+        'setPixelData': setPixelData,
+        'outputKernelFactory': outputKernelFactory
     };
 
 });

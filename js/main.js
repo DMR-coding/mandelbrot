@@ -2,7 +2,8 @@ requirejs.config({
     baseUrl: 'js',
     paths: {
         jquery: 'lib/jquery',
-        underscore: 'lib/underscore'
+        underscore: 'lib/underscore',
+        GPU: 'lib/gpu'
     }
 });
 

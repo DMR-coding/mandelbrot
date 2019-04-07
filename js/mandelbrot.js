@@ -1,5 +1,5 @@
 define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, math, graphics) {
-    const ZOOM_INCREMENT = 0.5;
+    const ZOOM_INCREMENT = .5;
 
     // Utility function that sets a new performance mark and measures from a previous one in the same call,
     // with guarding against performance API not available.
@@ -22,18 +22,22 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             this.$canvas.on('click', this.onClick);
 
             this.canvas = this.$canvas[0];
-            this.context = this.canvas.getContext('2d');
 
-            this.max_x = 1;
-            this.max_y = 1.3;
-            this.min_x = -2;
-            this.min_y = -1.3;
+            this.outputKernel = graphics.outputKernelFactory(this.canvas);
+            this.scoreDivergenceKernel = math.scoreDivergenceKernelFactory(this.canvas);
+
+
+            this.left_x = -1;
+            this.right_x = 1;
+
+            this.top_y = 1;
+            this.bottom_y = -1;
         }
 
         onClick(e) {
             e.preventDefault();
             this.zoom(graphics.getMouseCoord(e, this.canvas), e.shiftKey);
-            return this.render();
+            this.render()
         }
 
         render() {
@@ -51,32 +55,18 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
         async renderFrame() {
             trace('begin_render');
-            // This is a scratch that we can write image data to. It won't be rendered until we actually
-            // do `putImageData` below.
-            const frame = this.context.createImageData(this.canvas.width, this.canvas.height);
-
             trace('begin_generate_view', 'create_image_data', 'begin_render');
 
             // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
             // performed. All else is pretty-printing.
-            const [histogram, scores] = await this.generateView(frame.width, frame.height);
+            const [histogram, scores, totalScore] = await this.generateView();
 
-            trace('begin_totalling_score', 'generate_view', 'begin_generate_view');
+            trace('begin_plotting', 'generate_view', 'begin_generate_view');
 
+            this.outputKernel.setOutput([scores[0].length, scores.length]);
+            this.outputKernel(scores, totalScore, histogram);
 
-            trace('begin_plotting', 'total_score', 'begin_totalling_score');
-
-            // Here's where we take each score, translate it into a color value, and actually write it onto the
-            // scratch.
-            const colors = await graphics.colorize(scores, histogram);
-            for (let i = 0; i < colors.length; i++) {
-                graphics.setPixelData(frame, i, colors[i]);
-            }
-            trace('begin_blitting', 'plot', 'begin_plotting');
-
-            // And here's where we actually write the scratch to the canvas.
-            this.context.putImageData(frame, 0, 0);
-            trace(null, 'blit', 'begin_blitting');
+            trace(null, 'plot', 'begin_plotting');
 
             $(this).trigger('rendered');
             if (window.performance && window.console) {
@@ -88,55 +78,81 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
         // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
         // performed. All else is pretty-printing.
-        async generateView(width, height) {
+        async generateView() {
             const histogram = new Array(math.MAX_ITERATIONS);
+            // Histogram must be dense or gpu.js will choke on the nulls when it's trying to determine
+            // dimensionality.
+            histogram.fill(0);
 
-            // This is basically what pixelToPoint does. We duplicate the logic here because this
-            // is a tight inner loop, and the overhead turns out to be pretty significant if
-            // we actually call that method and its chained dependencies.
-            const x_scale = Math.abs(this.max_x - this.min_x) / this.canvas.width;
-            const y_scale = Math.abs(this.max_y - this.min_y) / this.canvas.height;
+            // Determine the scaling factor between each physical pixel and the logical x,y point
+            // it represents
+            const x_scale = Math.abs(this.right_x - this.left_x) / this.canvas.width;
+            const y_scale = Math.abs(this.bottom_y - this.top_y) / this.canvas.height;
 
-            // TODO: scoreRangeDivergence is in a worker, which at least unfreezes the dom so the spinner can
-            // go; but the MAIN point of it was so that we could divvy up the work. However I still need to
-            // figure out how to do that so that I don't create so much overhead that it more than cancels
-            // the benefit of parallelizing!
-            let scores = await math.scoreRangeDivergence(
-                x_scale, y_scale,
-                this.min_x, this.min_y,
-                width, height
-            );
+            console.log(y_scale, this.top_y, this.bottom_y);
 
-            for (let score of scores) {
-                score = Math.floor(score);
-                if (histogram[score] != null) {
-                    histogram[score] += 1;
-                } else {
-                    histogram[score] = 1;
+            // The scoreDivergenceKernel does all the heavy work of generating a mandelbrot set in
+            // hyper-parallel by abusing the canvas interface to achieve GPU acceleration.
+            this.scoreDivergenceKernel.setOutput([this.canvas.width, this.canvas.height]);
+            const scores = this.scoreDivergenceKernel(x_scale, y_scale, this.left_x,this.bottom_y);
+
+            for (let column of scores){
+                for (let score of column) {
+                    score = Math.floor(score);
+                    if (histogram[score] != null) {
+                        histogram[score] += 1;
+                    } else {
+                        histogram[score] = 1;
+                    }
                 }
-
             }
 
-            return [histogram, scores];
+            // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
+            // important here is that we're determining how much of it we have in frame total, so that each
+            // individual pixel can get a color value based on how it scores relative to the whole view. (That
+            // relative score is what makes mandelbrot visualizations pretty!)
+            let totalScore = 0;
+            for (let i = 0; i < math.MAX_ITERATIONS; i++) {
+                if (histogram[i]) {
+                    totalScore += histogram[i];
+                }
+            }
+
+            return [histogram, scores, totalScore];
         }
 
         //scale+transform each physical pixel to a logical point in the viewport
         pixelToPoint(pixel) {
-            const [width, height] = this.getViewportSize();
-            return [
-                pixel[0] * (width / this.canvas.width) + this.min_x,
-                pixel[1] * (height / this.canvas.height) + this.min_y
-            ];
+          let [width, height] = this.getViewportSize();
+
+          let x = pixel[0];
+          x *= width / this.canvas.width;
+          x += this.left_x;
+
+          let y = pixel[1];
+          y *= height / this.canvas.height;
+          y -= Math.abs(this.top_y);
+          y *= -1;
+
+          return [x, y];
         }
 
         getViewportSize() {
-            return [Math.abs(this.max_x - this.min_x), Math.abs(this.max_y - this.min_y)];
+            return [Math.abs(this.right_x - this.left_x), Math.abs(this.bottom_y - this.top_y)];
         }
 
         //Scale the logical viewport by a constant amount and center it on the
         //provided pixel.
         zoom(pixel, out) {
+            console.log({
+                'top': this.top_y,
+                'bottom': this.bottom_y,
+                'height': Math.abs(this.bottom_y - this.top_y)
+            });
             const [x, y] = this.pixelToPoint(pixel);
+
+            console.log("Centering on " + [x, y]);
+
             let [width, height] = this.getViewportSize();
 
             if (out) {
@@ -146,12 +162,17 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
                 width *= ZOOM_INCREMENT;
                 height *= ZOOM_INCREMENT;
             }
+            this.left_x = x - (width / 2);
+            this.right_x = x + (width / 2);
 
-            this.min_x = x - (width / 2);
-            this.max_x = x + (width / 2);
+            this.top_y = y + (height / 2);
+            this.bottom_y = y - (height / 2);
 
-            this.min_y = y - (height / 2);
-            return this.max_y = y + (height / 2);
+            console.log({
+                'top': this.top_y,
+                'bottom': this.bottom_y,
+                'height': Math.abs(this.bottom_y - this.top_y)
+            })
         }
     }
 
