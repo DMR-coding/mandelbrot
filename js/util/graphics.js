@@ -16,7 +16,7 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
         return [PIXEL_RATIO * (e.clientX - rect.left), PIXEL_RATIO * (e.clientY - rect.top)];
     }
 
-    function scoreToColor(scores, totalScore, histogram) {
+    function scoreToColor(scores, totalScoreBox, histogram) {
         // IMPORTANT!
         // This function is a gpu.js kernel payload. This imposes considerable restrictions on the subset
         // of javascript it may contain. However, it means it can be run for every point in the viewport
@@ -25,6 +25,9 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
         // Screen x runs in the same direction as cartesian x; screen y is opposite
         // cartesian y
         const score = scores[this.thread.y][this.thread.x];
+        const totalScore = totalScoreBox[0];
+
+        this.color(1, .75, .25);
 
         if (score === this.constants.MAX_ITERATIONS) {
             // These are the points that are actually approximated to be in the mandelbrot set.
@@ -82,9 +85,7 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
         }
     }
 
-    function outputKernelFactory(canvas) {
-        const gpuWorker = new GPU({'canvas': canvas});
-
+    function outputKernelFactory(gpuWorker) {
         return gpuWorker.createKernel(scoreToColor,
             {
                 'loopMaxIterations': math.MAX_ITERATIONS,
@@ -93,7 +94,8 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
                     'MAX_COLOR_VALUE': MAX_COLOR_VALUE,
                     'INTENSITY_CUTOFF': INTENSITY_CUTOFF,
                     'HIGH_INTENSITY_WEIGHT': HIGH_INTENSITY_WEIGHT
-                }
+                },
+                'pipeline': true
             })
             .setGraphical(true);
     }

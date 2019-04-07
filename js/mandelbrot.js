@@ -23,8 +23,12 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             this.canvas = this.$canvas[0];
 
-            this.outputKernel = graphics.outputKernelFactory(this.canvas);
-            this.scoreDivergenceKernel = math.scoreDivergenceKernelFactory(this.canvas);
+            this.gpuWorker = new GPU(this.canvas);
+            this.outputKernel = graphics.outputKernelFactory(this.gpuWorker);
+            let [scoreDivergenceKernel, histogramKernel, totalScoreKernel] = math.mathKernelFactory(this.gpuWorker);
+            this.scoreDivergenceKernel = scoreDivergenceKernel;
+            this.histogramKernel = histogramKernel;
+            this.totalScoreKernel = totalScoreKernel;
 
 
             this.left_x = -2;
@@ -58,7 +62,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
             // performed. All else is pretty-printing.
-            const [histogram, scores, totalScore] = await this.generateView();
+            this.generateView();
 
             trace('begin_plotting', 'generate_view', 'begin_generate_view');
 
@@ -69,8 +73,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             // gpu.js calling convention is to first fix the size of the output in 2 dimensions, then call the
             // "kernel" function,  which runs its inner function once with identical arguments for every
             // x,y in there.
-            this.outputKernel.setOutput([scores[0].length, scores.length]);
-            this.outputKernel(scores, totalScore, histogram);
+           // this.outputKernel(scores, totalScore, histogram);
 
             trace(null, 'plot', 'begin_plotting');
 
@@ -87,11 +90,6 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is actually
         // performed. All else is pretty-printing.
         async generateView() {
-            const histogram = new Array(math.MAX_ITERATIONS);
-            // Histogram must be dense or gpu.js will choke on the nulls when it's trying to determine
-            // dimensionality.
-            histogram.fill(0);
-
             // Determine the scaling factor between each physical pixel and the logical x,y point
             // it represents
             const x_scale = Math.abs(this.right_x - this.left_x) / this.canvas.width;
@@ -100,35 +98,31 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             // The scoreDivergenceKernel does all the heavy work of generating a mandelbrot set in
             // hyper-parallel by abusing the canvas interface to achieve GPU acceleration.
 
+            // Need function-local aliases to these for combineKernels to work.
+            const scoreKernel = this.scoreDivergenceKernel;
+            const histogramKernel = this.histogramKernel;
+            const totalScoreKernel = this.totalScoreKernel;
+            const outputKernel = this.outputKernel;
+
             // gpu.js calling convention is to first fix the size of the output in 2 dimensions, then call the
             // "kernel" function,  which runs its inner function once with identical arguments for every
             // x,y in there.
             this.scoreDivergenceKernel.setOutput([this.canvas.width, this.canvas.height]);
-            const scores = this.scoreDivergenceKernel(x_scale, y_scale, this.left_x,this.bottom_y);
+            this.outputKernel.setOutput([this.canvas.width, this.canvas.height]);
+            this.histogramKernel.setLoopMaxIterations(Math.max(this.canvas.width, this.canvas.height));
 
-            for (let column of scores){
-                for (let score of column) {
-                    score = Math.floor(score);
-                    if (histogram[score] != null) {
-                        histogram[score] += 1;
-                    } else {
-                        histogram[score] = 1;
-                    }
+            let composedKernel = this.gpuWorker.combineKernels(
+                scoreKernel, histogramKernel, totalScoreKernel, outputKernel,
+                function (x_scale, y_scale, left_x, bottom_y, width, height){
+                    let scores = scoreKernel(x_scale, y_scale, left_x,bottom_y);
+                    let histogram = histogramKernel(scores, width, height);
+                    let totalScore = totalScoreKernel(histogram);
+
+                    return outputKernel(scores, totalScore, histogram);
                 }
-            }
+            );
 
-            // Divergence score is math whose exact definition isn't important here; what matters is that
-            // we're determining how much of it we have in frame total, so that each
-            // individual pixel can get a color value based on how it scores relative to the whole view rather
-            // than absolutely. (That relative score is what makes mandelbrot visualizations pretty!)
-            let totalScore = 0;
-            for (let i = 0; i < math.MAX_ITERATIONS; i++) {
-                if (histogram[i]) {
-                    totalScore += histogram[i];
-                }
-            }
-
-            return [histogram, scores, totalScore];
+            console.log(composedKernel(x_scale, y_scale, this.left_x,this.bottom_y, this.canvas.width, this.canvas.height));
         }
 
         //scale+transform each physical pixel to a logical point in the viewport

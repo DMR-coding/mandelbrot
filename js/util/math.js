@@ -72,32 +72,66 @@ define(['underscore', 'GPU'], function(_, _GPU) {
         }
     }
 
-    function scoreDivergenceKernelFactory(canvas) {
-        let gpuWorker;
+    // This is a silly way to do this calculation. It's very linear and would by rights be faster on the CPU;
+    // but by doing it on the GPU we can avoid marshalling scores into main memory and run much faster overall
+    function computeHistogram(scores, width, height) {
+        let entry = 0;
+        for (let i = 0; i < width; i++){
+            for (let n = 0; n < height; n++) {
+                let score = Math.floor(scores[i][n]);
 
-        // Only use the main view canvas as our acceleration context if we're outputting to it graphically
-        // for debugging purposes. If we're actually passing values back, reusing it will fill it with
-        // garbage pixels and mess up the output.
-        if(DEBUG) {
-            gpuWorker = new GPU({'canvas': canvas});
-        } else {
-            gpuWorker = new GPU();
-
+                if(score === this.thread.x) {
+                    entry = entry + 1;
+                }
+            }
         }
-        return gpuWorker.createKernel(scoreDivergence,
+
+        return entry;
+    }
+
+    function totalScore(histogram) {
+        // Divergence score is math whose exact definition isn't important here; what matters is that
+        // we're determining how much of it we have in frame total, so that each
+        // individual pixel can get a color value based on how it scores relative to the whole view rather
+        // than absolutely. (That relative score is what makes mandelbrot visualizations pretty!)
+        let total = 0;
+        for(let i = 0; i < this.constants.MAX_ITERATIONS; i++){
+            total = total + histogram[i];
+        }
+        return total;
+    }
+
+    function mathKernelFactory(gpuWorker) {
+        let scoringKernel = gpuWorker.createKernel(scoreDivergence,
             {
                 'constants': {
                     'MAX_ITERATIONS': MAX_ITERATIONS,
                     'DEBUG': DEBUG ? 1 : 0
-                }
+                },
+                'pipeline': true
             }
         ).setGraphical(DEBUG);
-    }
 
+        let histogramKernel = gpuWorker.createKernel(computeHistogram, {
+            'pipeline': true
+        })
+        .setOutput([MAX_ITERATIONS]);
+
+        let totalScoreKernel = gpuWorker.createKernel(totalScore, {
+            'pipeline': true,
+            'loopMaxIterations': MAX_ITERATIONS,
+            'constants': {
+                'MAX_ITERATIONS': MAX_ITERATIONS
+            }
+        })
+        .setOutput([1]);
+
+        return [scoringKernel, histogramKernel, totalScoreKernel];
+    }
 
     return {
         'MAX_ITERATIONS': MAX_ITERATIONS,
         // 'scoreDivergence': scoreDivergence,
-        'scoreDivergenceKernelFactory': scoreDivergenceKernelFactory
+        'mathKernelFactory': mathKernelFactory
     };
 });
