@@ -62,6 +62,13 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             trace('begin_plotting', 'generate_view', 'begin_generate_view');
 
+            // The outputKernel uses the canvas as a GPU acceleration context to calculate a color value for
+            // each point score from above, and then outputs that color directly onto the canvas so it doesn't
+            // need to be round-tripped.
+
+            // gpu.js calling convention is to first fix the size of the output in 2 dimensions, then call the
+            // "kernel" function,  which runs its inner function once with identical arguments for every
+            // x,y in there.
             this.outputKernel.setOutput([scores[0].length, scores.length]);
             this.outputKernel(scores, totalScore, histogram);
 
@@ -92,8 +99,10 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             // The scoreDivergenceKernel does all the heavy work of generating a mandelbrot set in
             // hyper-parallel by abusing the canvas interface to achieve GPU acceleration.
-            // Basically we first fix the size of the output in 2 dimensions, then call the "kernel" function,
-            // which runs its inner function once with identical arguments for every x,y in there.
+
+            // gpu.js calling convention is to first fix the size of the output in 2 dimensions, then call the
+            // "kernel" function,  which runs its inner function once with identical arguments for every
+            // x,y in there.
             this.scoreDivergenceKernel.setOutput([this.canvas.width, this.canvas.height]);
             const scores = this.scoreDivergenceKernel(x_scale, y_scale, this.left_x,this.bottom_y);
 
@@ -108,10 +117,10 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
                 }
             }
 
-            // "(divergence) score" is a mathy thing in the mandelbrot algorithm I don't really understand. What's
-            // important here is that we're determining how much of it we have in frame total, so that each
-            // individual pixel can get a color value based on how it scores relative to the whole view. (That
-            // relative score is what makes mandelbrot visualizations pretty!)
+            // Divergence score is math whose exact definition isn't important here; what matters is that
+            // we're determining how much of it we have in frame total, so that each
+            // individual pixel can get a color value based on how it scores relative to the whole view rather
+            // than absolutely. (That relative score is what makes mandelbrot visualizations pretty!)
             let totalScore = 0;
             for (let i = 0; i < math.MAX_ITERATIONS; i++) {
                 if (histogram[i]) {
