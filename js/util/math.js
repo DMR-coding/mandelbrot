@@ -75,7 +75,17 @@ define(['underscore', 'GPU'], function(_, _GPU) {
     }
 
     function scoreDivergenceKernelFactory(canvas) {
-        gpuWorker = new GPU({'canvas': canvas});
+        let gpuWorker;
+
+        // Only use the main view canvas as our acceleration context if we're outputting to it graphically
+        // for debugging purposes. If we're actually passing values back, reusing it will fill it with
+        // garbage pixels and mess up the output.
+        if(DEBUG) {
+            gpuWorker = new GPU({'canvas': canvas});
+        } else {
+            gpuWorker = new GPU();
+
+        }
         return gpuWorker.createKernel(scoreDivergence,
             {
                 'constants': {

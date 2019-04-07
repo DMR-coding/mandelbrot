@@ -11,15 +11,6 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
     // so even though it's slow, we render multiple points per pixel.
     const PIXEL_RATIO = 2;
 
-    // imageData is a linear byte array of RGBA values
-    function setPixelData(imageData, index, rgba) {
-        // Multiply to convert from logical index (n RGBA quads into the array) to physical (n bytes in)
-        index *= RGBA_LENGTH;
-        for (let i = 0; i < rgba.length; i++) {
-            imageData.data[index + i] = rgba[i];
-        }
-    }
-
     function getMouseCoord(e, element) {
         const rect = element.getBoundingClientRect();
         return [PIXEL_RATIO * (e.clientX - rect.left), PIXEL_RATIO * (e.clientY - rect.top)];
@@ -110,7 +101,6 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
     return {
         'PIXEL_RATIO': PIXEL_RATIO,
         'getMouseCoord': getMouseCoord,
-        'setPixelData': setPixelData,
         'outputKernelFactory': outputKernelFactory
     };
 
