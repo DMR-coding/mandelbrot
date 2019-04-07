@@ -2,7 +2,7 @@
 // Requiring it actually does cause it to be loaded, so don't remove it as a dependency, but it just winds up
 // registered as window.GPU
 define(['underscore', 'GPU'], function(_, _GPU) {
-    const MAX_ITERATIONS = 10000;
+    const MAX_ITERATIONS = 1000;
     const DEBUG = false;
     
     // The mandelbrot set consists of points in complex space where iteratively applying a certain function to
