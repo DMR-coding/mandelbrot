@@ -23,7 +23,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             this.canvas = this.$canvas[0];
 
-            this.gpuWorker = new GPU(this.canvas);
+            this.gpuWorker = new GPU({'canvas': this.canvas});
             this.outputKernel = graphics.outputKernelFactory(this.gpuWorker);
             let [scoreDivergenceKernel, histogramKernel, totalScoreKernel] = math.mathKernelFactory(this.gpuWorker);
             this.scoreDivergenceKernel = scoreDivergenceKernel;
