@@ -72,8 +72,11 @@ define(['underscore', 'GPU'], function(_, _GPU) {
         }
     }
 
-    // This is a silly way to do this calculation. It's very linear and would by rights be faster on the CPU;
-    // but by doing it on the GPU we can avoid marshalling scores into main memory and run much faster overall
+    // This is a silly way to do this calculation. It's very linear and would be far faster on the CPU;
+    // but by doing it on the GPU we can avoid marshalling scores into main memory.
+
+    // FIXME: Unfortunately, "algorithmically silly" seems to trump "low overhead" and result in slower performance
+    // overall. :(
     function computeHistogram(scores, width, height) {
         let entry = 0;
         for (let i = 0; i < width; i++){
