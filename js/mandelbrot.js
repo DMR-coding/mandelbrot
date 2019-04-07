@@ -27,11 +27,11 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             this.scoreDivergenceKernel = math.scoreDivergenceKernelFactory(this.canvas);
 
 
-            this.left_x = -1;
+            this.left_x = -2;
             this.right_x = 1;
 
-            this.top_y = 1;
-            this.bottom_y = -1;
+            this.top_y = 1.3;
+            this.bottom_y = -1.3;
         }
 
         onClick(e) {
@@ -54,8 +54,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         }
 
         async renderFrame() {
-            trace('begin_render');
-            trace('begin_generate_view', 'create_image_data', 'begin_render');
+            trace('begin_generate_view');
 
             // This is where the actual heavy math for generating a particular view of the Mandelbrot Set is
             // performed. All else is pretty-printing.
@@ -70,7 +69,9 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
 
             $(this).trigger('rendered');
             if (window.performance && window.console) {
-                console.log(performance.getEntriesByType('measure'));
+                for(let measure of performance.getEntriesByType('measure')){
+                    console.log(measure['name'], measure['duration']);
+                }
                 performance.clearMarks();
                 performance.clearMeasures();
             }
@@ -89,10 +90,10 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
             const x_scale = Math.abs(this.right_x - this.left_x) / this.canvas.width;
             const y_scale = Math.abs(this.bottom_y - this.top_y) / this.canvas.height;
 
-            console.log(y_scale, this.top_y, this.bottom_y);
-
             // The scoreDivergenceKernel does all the heavy work of generating a mandelbrot set in
             // hyper-parallel by abusing the canvas interface to achieve GPU acceleration.
+            // Basically we first fix the size of the output in 2 dimensions, then call the "kernel" function,
+            // which runs its inner function once with identical arguments for every x,y in there.
             this.scoreDivergenceKernel.setOutput([this.canvas.width, this.canvas.height]);
             const scores = this.scoreDivergenceKernel(x_scale, y_scale, this.left_x,this.bottom_y);
 
@@ -132,7 +133,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
           let y = pixel[1];
           y *= height / this.canvas.height;
           y -= Math.abs(this.top_y);
-          y *= -1;
+          y *= -1; // logical y runs opposite its physical counterpart
 
           return [x, y];
         }
@@ -144,14 +145,7 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
         //Scale the logical viewport by a constant amount and center it on the
         //provided pixel.
         zoom(pixel, out) {
-            console.log({
-                'top': this.top_y,
-                'bottom': this.bottom_y,
-                'height': Math.abs(this.bottom_y - this.top_y)
-            });
             const [x, y] = this.pixelToPoint(pixel);
-
-            console.log("Centering on " + [x, y]);
 
             let [width, height] = this.getViewportSize();
 
@@ -162,17 +156,13 @@ define(['jquery', 'underscore', 'util/math', 'util/graphics'], function($, _, ma
                 width *= ZOOM_INCREMENT;
                 height *= ZOOM_INCREMENT;
             }
+
             this.left_x = x - (width / 2);
             this.right_x = x + (width / 2);
 
+            // Logical y runs opposite physical y, hence why this logic is reversed from x
             this.top_y = y + (height / 2);
             this.bottom_y = y - (height / 2);
-
-            console.log({
-                'top': this.top_y,
-                'bottom': this.bottom_y,
-                'height': Math.abs(this.bottom_y - this.top_y)
-            })
         }
     }
 

@@ -26,6 +26,13 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
     }
 
     function scoreToColor(scores, totalScore, histogram) {
+        // IMPORTANT!
+        // This function is a gpu.js kernel payload. This imposes considerable restrictions on the subset
+        // of javascript it may contain. However, it means it can be run for every point in the viewport
+        // in hyper-parallel, for MASSIVE performance gains. `this` is an object provided by gpu.js
+
+        // Screen x runs in the same direction as cartesian x; screen y is opposite
+        // cartesian y
         const score = scores[this.thread.y][this.thread.x];
 
         if (score === this.constants.MAX_ITERATIONS) {
@@ -74,7 +81,8 @@ define(['underscore', 'util/math',  'GPU'], function(_, math, _GPU) {
 
             const proportion = score % 1;
 
-            // gpu.js builtin for outputting
+            // gpu.js builtin for outputting directly to the same canvas that's being used to accelerate
+            // this whole deal, basically making the whole function an intensive shader.
             this.color(
                 R1 * (1-proportion) + R2 * proportion,
                 G1 * (1-proportion) + G2 * proportion,

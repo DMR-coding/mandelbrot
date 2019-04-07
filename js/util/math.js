@@ -1,4 +1,4 @@
-//the GPU lib is supposed to be AMD compatible, but its AMD support is kinda broken.
+// the GPU lib is supposed to be AMD compatible, but its AMD support is kinda broken.
 // Requiring it actually does cause it to be loaded, so don't remove it as a dependency, but it just winds up
 // registered as window.GPU
 define(['underscore', 'GPU'], function(_, _GPU) {
@@ -13,6 +13,11 @@ define(['underscore', 'GPU'], function(_, _GPU) {
     // points _near_ the set. They are given a score based on how many iterations it takes for them to diverge
     // (approach infinity) which makes for the most interesting visuals.
     function scoreDivergence(x_scale, y_scale, left_x, bottom_y) {
+        // IMPORTANT!
+        // This function is a gpu.js kernel payload. This imposes considerable restrictions on the subset
+        // of javascript it may contain. However, it means it can be run for every point in the viewport
+        // in hyper-parallel, for MASSIVE performance gains. `this` is an object provided by gpu.js
+
         // Screen x runs in the same direction as cartesian x; screen y is opposite
         // cartesian y
         const lx = this.thread.x * x_scale + left_x;
@@ -40,7 +45,8 @@ define(['underscore', 'GPU'], function(_, _GPU) {
            return iteration;
         }
         else {
-            // Do direct graphical output
+            // Do basic, direct graphical output instead of returning the results for more dramatic
+            // visualization. Draws axes and colors the quadrants to help us detect inverted logic.
             if(iteration === this.constants.MAX_ITERATIONS) {
                 this.color(0, 0, 0);
             } else {
