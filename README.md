@@ -11,6 +11,7 @@ Technologies
 
 Libraries
 ---------
+* GPU acceleration by gpu.js -- http://gpu.rocks
 * Code modularization by requirejs -- http://requirejs.org
 * Utility functions by underscore -- http://underscorejs.org
 * DOM manipulation by jQuery -- http://jquery.com
